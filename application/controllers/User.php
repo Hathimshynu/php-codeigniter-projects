@@ -21,6 +21,103 @@ class User extends CI_Controller
       redirect('user/signup', 'refresh');
     }
   }
+// ----------------------------------------------------------------------------------------------------------------------------------------
+    public function registration()
+  {
+    if ($_POST) {
+
+
+      $this->load->library('form_validation');
+      $this->form_validation->set_rules('username', 'username', 'trim|required');
+      $this->form_validation->set_rules('email', 'email', 'trim|required|valid_email|is_unique[user.email]', array('is_unique' => 'Email already exists'));
+      $this->form_validation->set_rules('pwd', 'pwd', 'trim|required');
+      $this->form_validation->set_rules('mobile', 'mobile', 'required|min_length[10]|max_length[12]');
+
+      if ($this->form_validation->run() == FALSE) {
+
+        $this->load->view('user/registration');
+      } else {
+        $unique_code = random_string('alnum', 8); // Generate a 6-digit random number
+
+        // Check if the generated number already exists in the database
+        while ($this->db->where('verification_code', $unique_code)->get('user')->num_rows() > 0) {
+          $unique_code = random_string('alnum', 8); // Generate a new random number
+        }
+        $datas = array(
+          'username' => $this->input->post('username'),
+          'email' => $this->input->post('email'),
+          'pwd' => $this->input->post('pwd'),
+          'mobile' => $this->input->post('mobile'),
+          'verification_code' => $unique_code
+        );
+        $ins = $this->db->insert('user', $datas);
+        echo "Registration Successfull";
+        $this->session->set_userdata('username');
+        if ($ins) {
+          $verification_code = $this->db->select('verification_code')->where('email', $this->input->post('email'))->get('user')->row()->verification_code;
+          echo "Your verification code is " . $verification_code;
+          $this->load->library('email');
+          // $config = array();
+          $config['mailtype'] = 'html';
+          $this->email->initialize($config);
+          $this->email->set_newline("\r\n");
+          $this->email->from('noreplay@backofficee.com', 'SQUAREMARKET');
+          $this->email->reply_to('noreplay@backofficee.com', 'SQUAREMARKET');
+          $this->email->to($this->input->post('email'));
+          $this->email->subject("Verify Your  Details");
+          $message = 'Dear ' . $this->input->post('username') . ',<br><br>';
+          $message .= 'Thank you for registering Our Website !. Your email address is: ' . $this->input->post('email') . ' and your password is: ' . $this->input->post('pwd');
+          $message .= 'To verify your Details, please click the following link: <br><br>';
+          $message .= '<button style="background-color: #4CAF50; color: white; padding: 10px 15px; border: none; border-radius: 5px;">
+          <a href="' . BASEURL . 'user/verify_link/' . $verification_code . '" style="text-decoration:none; color: white;">Verify Email Address</a></button><br><br>';
+          $message .= 'Thank you,<br>';
+          $message .= 'SQUAREMARKET';
+
+          $this->email->message($message);
+          $this->email->send();
+
+          if ($this->email->send()) {
+            echo "sent";
+            $this->session->set_flashdata('success_message', 'Verify link sent your registered mail ID');
+            $this->load->view('user/registration');
+          } else {
+            echo "not sent ";
+            $this->session->set_flashdata('error_message', 'Verify Link Not Sent');
+            $this->load->view('user/registration', 'refresh');
+          }
+        }
+      }
+    } else {
+      $this->load->view('user/registration');
+    }
+  }
+  
+  
+//   ------------------------------------------------------------------------------------------------------------------------------
+  public function verify_link($verification_code)
+  {
+
+    log_message('error', "hii");
+    $query = $this->db->where('verification_code', $verification_code)->where('is_verified', 'not_verified')->get('user')->num_rows();
+    log_message('error', $query);
+    if ($query > 0) {
+      // If verification code is not empty and user is not verified, update the is_verified column
+      $this->db->where('verification_code', $verification_code)->where('is_verified', 'verified')->update('user');
+      $message = 'Your account has been verified Successfully!';
+      return $message;
+    } else {
+      // If verification code is empty or user is already verified, display appropriate message
+      $user =  $this->db->where('verification_code', $verification_code)->get('user')->row()->verification_code;
+
+      if ($user && $user->is_verified == 'verified') {
+        $message = 'Your account is already verified!';
+        return $message;
+      } else {
+        $message = 'Invalid verification code!';
+        return $message;
+      }
+    }
+  }
 
 
   // ----------------------------------------------------------------------------------------------------
